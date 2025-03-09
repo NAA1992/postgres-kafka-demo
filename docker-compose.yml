@@ -1,189 +1,52 @@
 services:
 
-  postgres:
-    networks:
-      - kafka_network
-    volumes:
-      - kafka-postgres-data:/var/lib/postgresql/data
-      - ./postgres:/home/config
-    image: debezium/postgres:11
-    container_name: demo-kafka-postgres
-    environment:
-      POSTGRES_PASSWORD: postgres
-    command: postgres -c config_file=/home/config/postgresql.conf
-    ports:
-      - 10864:5432
-
   zookeeper:
-    networks:
-      - kafka_network
-    image: confluentinc/cp-zookeeper:5.1.2
+    image: confluentinc/cp-zookeeper:7.9.0
     container_name: demo-kafka-zookeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
 
   kafka-0:
-    networks:
-      - kafka_network
-    image: confluentinc/cp-kafka:5.1.2
+    image: confluentinc/cp-kafka:7.9.0
     container_name: demo-kafka-0
     depends_on:
       - zookeeper
     ports:
-      - 9092:9092
+      - ${KAFKA_0_PORT_EXTERNAL}:${KAFKA_0_PORT_EXTERNAL}
+    hostname: kafka
     environment:
-      KAFKA_BROKER_ID: 1
+      KAFKA_BROKER_ID: 0
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-0:9091
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL,CONTROLLER:SASL_SSL
-      KAFKA_CFG_ADVERTISED_LISTENERS: INTERNAL://:9091,EXTERNAL://192.168.0.188:29092
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:${KAFKA_0_PORT_EXTERNAL},PLAINTEXT_INTERNAL://kafka-0:${KAFKA_0_PORT_INTERNAL}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+#      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:SASL_SSL,EXTERNAL:SASL_SSL,CONTROLLER:SASL_SSL
+#      KAFKA_CFG_ADVERTISED_LISTENERS: INTERNAL://:9091,EXTERNAL://192.168.0.188:29092
       KAFKA_CLIENT_USERS: sa,da,va
     healthcheck:
-      test: "bash -c 'printf \"\" > /dev/tcp/127.0.0.1/9091; exit $$?;'"
+      test: "bash -c 'printf \"\" > /dev/tcp/127.0.0.1/${KAFKA_0_PORT_EXTERNAL}; exit $$?;'"
       interval: 5s
       timeout: 10s
       retries: 3
       start_period: 30s
 
-  kafka-exporter:
-    networks:
-      - kafka_network
-    container_name: demo-kafka-exporter
-    image: docker.io/bitnami/kafka-exporter:1.7.0
-    hostname: kafka-exporter
+  kafka-ui:
+    container_name: demo-kafka-ui
+    image: provectuslabs/kafka-ui:v0.7.2
     ports:
-      - 9308:9308
-    command: --kafka.server=kafka-0:9091 --sasl.enabled --sasl.mechanism=PLAIN --sasl.username=sa --sasl.password=000000 --tls.enabled --tls.insecure-skip-tls-verify --tls.ca-file=/kafka.truststore.jks --log.level=debug
-    volumes:
-      - ./truststore/kafka.truststore.jks:/kafka.truststore.jks:ro
-    depends_on:
-      kafka-0:
-        condition: service_healthy
-#      kafka-1:
-#        condition: service_healthy
-#      kafka-2:
-#        condition: service_healthy
-    healthcheck:
-      test: "bash -c 'printf \"\" > /dev/tcp/127.0.0.1/9308; exit $$?;'"
-      interval: 5s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-
-
-  schema-registry:
-    networks:
-      - kafka_network
-    image: confluentinc/cp-schema-registry:5.1.2
-    container_name: demo-kafka-schema-registry
-    hostname: schema-registry
-    ports:
-      - 8081:8081
-    depends_on:
-      - zookeeper
-      - kafka-0
+      - 9999:8080
     environment:
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-0:9092
-      SCHEMA_REGISTRY_HOST_NAME: schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_CONNECTION_URL: zookeeper:2181
-      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
-
-  ksql-server:
-    networks:
-      - kafka_network
-    image: confluentinc/cp-ksql-server:5.1.2
-    container_name: demo-kafka-ksql-server
-    depends_on:
-      - kafka-0
-      - schema-registry
-    environment:
-      KSQL_BOOTSTRAP_SERVERS: kafka-0:9092
-      KSQL_LISTENERS: http://0.0.0.0:8088
-      KSQL_KSQL_SCHEMA_REGISTRY_URL: http://schema-registry:8081
-      KSQL_KSQL_SERVICE_ID: ksql-server
-
-  connect:
-    networks:
-      - kafka_network
-    image: mtpatter/debezium-connect  # built from debezium/connect:0.10
-    container_name: demo-kafka-debezium-connect
-    build:
-      context: .
-      dockerfile: debezium.Dockerfile
-    depends_on:
-      - zookeeper
-      - kafka-0
-      - postgres
-    ports:
-      - 8083:8083
-    environment:
-        GROUP_ID: 1
-        CONFIG_STORAGE_TOPIC: my-connect-configs
-        OFFSET_STORAGE_TOPIC: my-connect-offsets
-        ADVERTISED_HOST_NAME: connect
-        BOOTSTRAP_SERVERS: kafka-0:9092
-        CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-        CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
-
-  prometheus:
-    networks:
-      - kafka_network
-    image: prom/prometheus:v2.51.2
-    container_name: demo-kafka-prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    ports:
-      - 9090:9090
-    volumes:
-      - ./prometheus:/etc/prometheus
-      - kafka-prometheus-data:/prometheus
-    depends_on:
-      - kafka-exporter
-    healthcheck:
-      test: wget --no-verbose --tries=1 --spider localhost:9090 || exit 1
-      interval: 5s
-      timeout: 10s
-      retries: 3
-      start_period: 5s      
-        
-  grafana:
-    networks:
-      - kafka_network
-    image: grafana/grafana:10.4.2
-    container_name: demo-kafka-grafana
-    ports:
-      - 3000:3000
-    environment:
-      # AUTH
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
-    depends_on:
-      - prometheus
-    healthcheck:
-      test: curl --fail localhost:3000
-      interval: 5s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      DYNAMIC_CONFIG_ENABLED: true
   
 
 
 networks:
-  kafka_network:
+  default:
     driver: bridge
     name: kafka_network
 
-volumes:
-  kafka-postgres-data:
-    driver: local
-    name: "kafka-postgres-data"
-  kafka-prometheus-data:
-    driver: local
-    name: "kafka-prometheus-data"

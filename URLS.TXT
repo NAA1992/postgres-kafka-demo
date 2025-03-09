@@ -1,0 +1,25 @@
+kafka with zookeper (docker compose)
+https://github.com/provectus/kafka-ui/blob/master/documentation/compose/kafka-with-zookeeper.yaml
+
+kafka ui with 2 kafkas (docker compose)
+https://github.com/provectus/kafka-ui/blob/master/documentation/compose/kafka-ui.yaml
+
+На какой версии держится cp-kafka на самом деле (7.9.0 на 3.9, это же можно через kafka ui посмотреть)
+https://docs.confluent.io/platform/current/release-notes/index.html#confluent-community-ak
+
+экспортеры для прометеус
+https://habr.com/ru/articles/711936/
+
+чел пишет тоже про кафку
+https://habr.com/ru/articles/738874/
+
+kafka-compose я использовал в качестве примера
+https://github.com/yubazh/kafka-compose/tree/master
+https://habr.com/ru/articles/810061/
+
+Я к себе скопировал postgres-kafka-demo
+https://github.com/NAA1992/postgres-kafka-demo/tree/master
+
+Слерм рассказывает про кафку
+https://www.youtube.com/watch?v=Nj4tNJinRpw
+

@@ -2,3 +2,6 @@ pem/
 truststore/
 keystore/
 certificate-authority/
+/venv/
+temp/
+tmp/
